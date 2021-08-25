@@ -136,11 +136,11 @@ func (self Node) isLazy() bool {
 
 // Raw returns underlying json string of an raw node,
 // which usually created by Search() api
-func (self Node) Raw() string {
+func (self *Node) Raw() (string, error) {
     if !self.IsRaw() {
-        panic("value cannot be represented as raw json")
+        return "", ErrNotFound
     }
-    return addr2str(self.p, self.v)
+    return addr2str(self.p, self.v), nil
 }
 
 func (self *Node) checkRaw() error {
@@ -153,82 +153,72 @@ func (self *Node) checkRaw() error {
     return nil
 }
 
-// Bool returns bool value represented by this node
+// Bool_E returns bool value represented by this node
 //
-// If node type is not types.V_TRUE or types.V_FALSE, or V_RAW (must be a bool json value)
-// it will panic
-func (self *Node) Bool() bool {
+// If node type is not types.V_TRUE or types.V_FALSE, or V_RAW (must be a bool json value),
+// it will return error
+func (self *Node) Bool() (bool, error) {
     if err := self.checkRaw(); err != nil {
-        panic(err)
+        return false, err
     }
     switch self.t {
-        case types.V_TRUE  : return true
-        case types.V_FALSE : return false
-        default : panic("value cannot be represented as a boolean")
+        case types.V_TRUE  : return true , nil
+        case types.V_FALSE : return false, nil
+        default            : return false, ErrUnsupportType
     }
 }
 
 // Int64 as above.
-func (self *Node) Int64() int64 {
+func (self *Node) Int64() (int64, error) {
     if err := self.checkRaw(); err != nil {
-        panic(err)
+        return 0, err
     }
     switch self.t {
-        case _V_NUMBER        : 
-        v, e := numberToInt64(self)
-        if e != nil {
-            panic(e.Error())
-        }
-        return v
-        case types.V_TRUE     : return 1
-        case types.V_FALSE    : return 0
-        default               : panic("value cannot be represented as an integer")
+        case _V_NUMBER        : return numberToInt64(self)
+        case types.V_TRUE     : return 1, nil
+        case types.V_FALSE    : return 0, nil
+        default               : return 0, ErrUnsupportType
     }
 }
 
 // Number as above.
-func (self *Node) Number() json.Number {
+func (self *Node) Number() (json.Number, error) {
     if err := self.checkRaw(); err != nil {
-        panic(err)
+        return json.Number("0"), err
     }
     switch self.t {
-        case _V_NUMBER        : return toNumber(self)
-        case types.V_TRUE     : return json.Number("1")
-        case types.V_FALSE    : return json.Number("0")
-        default               : panic("value cannot be represented as a json.Number")
+        case _V_NUMBER        : return toNumber(self)  , nil
+        case types.V_TRUE     : return json.Number("1"), nil
+        case types.V_FALSE    : return json.Number("0"), nil
+        default               : return json.Number("0"), ErrUnsupportType
     }
 }
 
 // String as above.
-func (self *Node) String() string {
+func (self *Node) String() (string, error) {
     if err := self.checkRaw(); err != nil {
-        panic(err)
+        return "", nil
     }
     switch self.t {
-        case _V_NUMBER       : return toNumber(self).String()
-        case types.V_NULL    : return "null"
-        case types.V_TRUE    : return "true"
-        case types.V_FALSE   : return "false"
-        case types.V_STRING  : return addr2str(self.p, self.v)
-        default              : panic("value cannot be represented as a simple string")
+        case _V_NUMBER       : return toNumber(self).String(), nil
+        case types.V_NULL    : return "null" , nil
+        case types.V_TRUE    : return "true" , nil
+        case types.V_FALSE   : return "false", nil
+        case types.V_STRING  : return addr2str(self.p, self.v), nil
+        default              : return ""     , ErrUnsupportType
     }
 }
 
 // Float64 as above.
-func (self *Node) Float64() float64 {
+func (self *Node) Float64() (float64, error) {
     if err := self.checkRaw(); err != nil {
-        panic(err)
+        return 0.0, err
     }
     switch self.t {
-        case _V_NUMBER       :
-        v, e := numberToFloat64(self)
-        if e != nil {
-            panic(e.Error())
-        }
-        return v
-        case types.V_TRUE    : return 1.0
-        case types.V_FALSE   : return 0.0
-        default              : panic("value cannot be represented as an integer")
+        case _V_NUMBER       : return numberToFloat64(self)
+        case types.V_TRUE    : return 1.0, nil
+        case types.V_FALSE   : return 0.0, nil
+        default              : return 0.0, ErrUnsupportType
     }
 }
 
@@ -440,9 +430,11 @@ func (self *Node) Index(idx int) *Node {
 
 // Values returns iterator for array's children traversal
 func (self *Node) Values() (ListIterator, error) {
-    self.must(types.V_ARRAY, "an array")
+    if err := self.should(types.V_ARRAY, "an array"); err != nil {
+        return ListIterator{}, err
+    }
     if err := self.skipAllIndex(); err != nil {
-        return ListIterator{}, nil
+        return ListIterator{}, err
     }
     return ListIterator{Iterator{p: self}}, nil
 }
