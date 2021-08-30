@@ -1,4 +1,4 @@
-module github.com/bytedance/sonic
+module github.com/gooxion/sonic
 
 go 1.15
 
